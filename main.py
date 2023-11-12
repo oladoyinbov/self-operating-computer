@@ -82,15 +82,24 @@ You are a Self Operating Computer. You use the same visual and input interfaces 
 
 You have an objective from the user and you will decide the exact click and keyboard type actions to accomplish that goal. 
 
-You have the tools (i.e. functions) below to accomplish the task.
+You have the actions (i.e. functions) below to accomplish the task.
 
 1. mouse_click - Move mouse and click
 2. keyboard_type - Type on the keyboard
 3. mac_search - Search for a program on Mac
 
-Your instructions must be in JSON format in the format below. 
+Use the following format to do an action: 
 
-Let's look at each function. 
+Action: {
+    "action": "Action name here",
+    "arguments": {
+        "argument_name": "argument_value"
+    },
+    "explanation": "An explanation here"
+}
+
+
+Your instructions must be in JSON format in the format below. Let's look at each function.
 
 1. mouse_click
 
@@ -106,16 +115,6 @@ Action: {
     },
     "explanation": "Clicking the banana image on Google"
 }
-__
-Objective: Write an email to Best buy and ask for computer support
-Action: {
-    "action": "mouse_click",
-    "arguments": {
-        "x": "0.2", "y": "0.1", 
-    },
-    "explanation": "Clicking on the email compose box in Outlook"
-}
-
 
 2. keyboard_type
 
@@ -147,6 +146,8 @@ Action: {
     "explanation": "Searching for spotify"
 }
 
+Important: Take one action at each step. Do not include "Action:" in your response.
+
 Finally, once you have completed the objective, write the following phase and only this phase: DONE
 
 """
@@ -155,8 +156,6 @@ USER_TOOL_PROMPT = """
 Objective: {objective}
 Action:
 """
-
-# def agent_loop():
 
 
 def format_click_prompt(objective, click_guess):
@@ -178,56 +177,31 @@ def get_next_action(messages):
     with open("new_screenshot.png", "rb") as img_file:
         img_base64 = base64.b64encode(img_file.read()).decode("utf-8")
 
-    messages = messages + [
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "Use this image to decide the next action"},
-                {
-                    "type": "image_url",
-                    "image_url": {"url": f"data:image/jpeg;base64,{img_base64}"},
-                },
-            ],
-        }
-    ]
+    # messages = messages + [
+    #     {
+    #         "role": "user",
+    #         "content": [
+    #             {"type": "text", "text": "Use this image to decide the next action"},
+    #             {
+    #                 "type": "image_url",
+    #                 "image_url": {"url": f"data:image/jpeg;base64,{img_base64}"},
+    #             },
+    #         ],
+    #     }
+    # ]
 
     response = client.chat.completions.create(
-        model="gpt-4-vision-preview",
+        # model="gpt-4-vision-preview",
+        model="gpt-4",
         messages=messages,
     )
 
     return response.choices[0].message
 
 
-def check_click_location():
-    screen_width, screen_height = pyautogui.size()
-
-    # Get current mouse position
-    mouse_x, mouse_y = pyautogui.position()
-
-    # Calculate the rectangle bounds (25% of the screen around the mouse)
-    capture_width = screen_width * 0.25
-    capture_height = screen_height * 0.25
-    left = max(mouse_x - capture_width / 2, 0)
-    top = max(mouse_y - capture_height / 2, 0)
-    right = min(mouse_x + capture_width / 2, screen_width)
-    bottom = min(mouse_y + capture_height / 2, screen_height)
-
-    # Capture the specified portion of the screen
-    screen = ImageGrab.grab(bbox=(left, top, right, bottom))
-
-    # Save the image file
-    screen.save("mouse_location_check.png")
-
-    return False
-
-
-def handle_click(
-    objective,
-    click_guess,
+def mouse_click(
     x_percentage,
     y_percentage,
-    content="",
     duration=0.5,
 ):
     # Get the size of the primary monitor
@@ -240,21 +214,8 @@ def handle_click(
     # Move to the position smoothly
     pyautogui.moveTo(x_pixel, y_pixel, duration=duration)
 
-    correct_click_location, new_x_pixal, new_y_pixel = evaluate_mouse(
-        objective, click_guess, content
-    )
-    print("correct_click_location", correct_click_location)
-
-    if not correct_click_location:
-        print("We need to reposition the mouse")
-        print("new_x_pixal", new_x_pixal)
-        print("new_y_pixel", new_y_pixel)
-        x_pixel = new_x_pixal
-        y_pixel = new_y_pixel
-        pyautogui.moveTo(x_pixel, y_pixel, duration=duration)
-
     click_at_percentage(x_pixel, y_pixel)
-    return "We clicked " + click_guess
+    return "Click completed"
 
 
 def click_at_percentage(x_pixel, y_pixel, circle_radius=50, circle_duration=0.3):
@@ -269,59 +230,6 @@ def click_at_percentage(x_pixel, y_pixel, circle_radius=50, circle_duration=0.3)
     # Finally, click
     pyautogui.click(x_pixel, y_pixel)
     return "successfully clicked"
-
-
-def evaluate_mouse(objective, click_guess, original_location):
-    screen = ImageGrab.grab()
-
-    # Save the image file
-    screen.save("new_screenshot.png")
-
-    with open("new_screenshot.png", "rb") as img_file:
-        img_base64 = base64.b64encode(img_file.read()).decode("utf-8")
-
-    reposition_click_prompt = format_reposition_mouse_prompt(
-        objective, click_guess, original_location
-    )
-
-    response = client.chat.completions.create(
-        model="gpt-4-vision-preview",
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": reposition_click_prompt},
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": f"data:image/jpeg;base64,{img_base64}"},
-                    },
-                ],
-            }
-        ],
-        max_tokens=300,
-    )
-
-    result = response.choices[0]
-    content = result.message.content
-    print("[evaluate_mouse] content", content)
-    if content == "NONE":
-        return True, 0, 0
-
-    parsed_result = extract_json_from_string(content)
-
-    return False, parsed_result["x"], parsed_result["y"]
-
-
-def mouse_click(objective):
-    print("[mouse_click] click_xy", click_xy)
-    parsed_result = extract_json_from_string(click_xy)
-    if parsed_result:
-        handle_click(
-            objective, click_guess, parsed_result["x"], parsed_result["y"], content
-        )
-        return "We clicked something, it may have been" + click_guess
-
-    return "We failed to click" + click_guess
 
 
 def add_labeled_grid_to_image(image_path, grid_interval):
@@ -501,7 +409,7 @@ def main():
     loop_count = 0
 
     while looping:
-        time.sleep(2)
+        # time.sleep(2)
         response = get_next_action(messages)
         print("[main] response", response)
 
@@ -514,20 +422,24 @@ def main():
             looping = False
             break
 
-        decision = json.loads(content)
+        decision = extract_json_from_string(content)
+
         print("[main] decision", decision)
         action = decision.get("action")
         arguments = decision.get("arguments")
 
         if action == "mouse_click":
             click_xy = arguments
-            function_response = mouse_click(click_xy)
+            x_percentage = click_xy.get("x")
+            y_percentage = click_xy.get("y")
+
+            mouse_click(x_percentage, y_percentage)
         elif action == "keyboard_type":
-            type_value = function_args.get("type_value")
-            function_response = keyboard_type(type_value)
+            type_value = arguments.get("type_value")
+            keyboard_type(type_value)
         elif action == "mac_search":
-            type_value = function_args.get("type_value")
-            function_response = mac_search(type_value)
+            type_value = arguments.get("type_value")
+            mac_search(type_value)
         else:
             print("Something went wrong")
 
