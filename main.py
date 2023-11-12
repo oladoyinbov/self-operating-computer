@@ -36,57 +36,6 @@ style = PromptStyle.from_dict(
     }
 )
 
-tools = [
-    {
-        "type": "function",
-        "function": {
-            "name": "mouse_click",
-            "description": "This function can't actually see the screen, but it is going to guess what should be clicked next and pass that to another function that will manage the actual click. These paired functions do a mouse click to focus on windows and field or click button or menu items (and more)",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "click_guess": {
-                        "type": "string",
-                        "description": "A guess of what the next click should be.",
-                    },
-                },
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "keyboard_type",
-            "description": "This function types the specified text on the keyboard.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "type_value": {
-                        "type": "string",
-                        "description": "The text to type on the keyboard.",
-                    },
-                },
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "mac_search",
-            "description": "This function search's Mac for programs",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "type_value": {
-                        "type": "string",
-                        "description": "The text to do on Mac search.",
-                    },
-                },
-            },
-        },
-    },
-]
-
 
 PROMPT_POSITION = """
 From looking at a screenshot, your goal is to guess the X & Y location on the screen in order to fire a click event. The X & Y location are in percentage (%) of screen width and height.
@@ -116,45 +65,6 @@ Guess: {guess}
 Location: 
 """
 
-REPOSITION_MOUSE_PROMPT = """
-From looking at a screenshot, your goal is to guess the X & Y location on the screen in order to fire a click event. The X & Y location are in percentage (%) of screen width and height.
-
-You just moved the mouse, but now your job is to ensure that the mouse is at the right location. Compare the new mouse location in the image to the objective and click guidance (that is guess). 
-
-If the location looks right then return only the following text: NONE
-
-If the location doesn't look correct then correct the mouse location to get it right. 
-
-
-Example are below.
-__
-Objective: Find a image of a banana
-Guess: Click on the Window with an image of a banana in it. 
-Original Location: {{ "x": "0.5", "y": "0.6", "justification": "I think the banana is in the middle of the screen" }} 
-Update: NONE
-__
-Objective: Write an email to Best buy and ask for computer support
-Guess: Click on the email compose window in Outlook
-Original Location:  {{ "x": "0.2", "y": "0.1", "justification": "It looks like this is where the email compose window is" }} 
-Update: {{ "x": "0.25", "y": "0.11", "justification": "It looks like I was not far enough in the X position the first time." }}
-__
-Objective: Open Spotify and play the beatles
-Guess: Click on the search field in the Spotify app
-Original Location:  {{ "x": "0.2", "y": "0.9", "justification": "I think this is the search field." }}
-Update: {{ "x": "0.1", "y": "0.9", "justification": "The search field is actually at the start of the screen." }}
-__
-
-IMPORTANT: Respond with nothing but the `{{ "x": "percent", "y": "percent",  "justification": "justificaiton here" }}` and do not comment additionally.
-
-Here's where it gets a little complex. A previous function provided you a guess of what to click, but this function was blind so it may be wrong. 
-
-Based on the objective below and the guess use your best judgement on what you should click to reach this objective. 
-Objective: {objective}
-Guess: {guess}
-Original Location: {original_location}
-Update: 
-"""
-
 
 PROMPT_TYPE = """
 You are a professional writer. Based on the objective below, decide what you should write. 
@@ -170,7 +80,7 @@ USER_QUESTION = "What would you like the computer to do?"
 SYSTEM_PROMPT = """
 You are a Self Operating Computer. You use the same visual and input interfaces (i.e. screenshot, click & type) as a human, except you are superhuman. 
 
-You will receive an objective from the user and you will decide the exact click and keyboard type actions to accomplish that goal. 
+You have an objective from the user and you will decide the exact click and keyboard type actions to accomplish that goal. 
 
 You have the tools (i.e. functions) below to accomplish the task.
 
@@ -178,13 +88,83 @@ You have the tools (i.e. functions) below to accomplish the task.
 2. `keyboard_type` Type on the keyboard
 3. `mac_search` Search for a program on Mac
 
-IMPORTANT: It is important to know that before you use `keyboard_type` in a new program you just opened you often need to `click_at_percentage` at the location where you want to type. 
+Your instructions must always be in JSON format in the format below. 
 
-When you completed the task respond with the exact following phrase content: DONE
+{{
+    "tool": "Write the function name here, such as `mouse_click`, etc.",
+    "arguments": {{
+        "argument": "Write the arguments in here. We will look closer at what the arguments look like.",
+    }}
+}}
+
+Let's look at each function. 
+
+1. `mouse_click`
+
+From looking at a screenshot, your goal is to guess the X & Y location on the screen in order to fire a click event. The X & Y location are in percentage (%) of screen width and height.
+
+Examples are below.
+__
+Objective: Find a image of a banana
+Action: {{
+    "action": "mouse_click",
+    "arguments": {{
+        "x": "0.5", "y": "0.6"
+    }},
+    "explanation": "Clicking the banana image on Google"
+}
+__
+Objective: Write an email to Best buy and ask for computer support
+Action: {{
+    "action": "mouse_click",
+    "arguments": {{
+        "x": "0.2", "y": "0.1", 
+    }},
+    "explanation": "Clicking on the email compose box in Outlook"
+}
+
+
+2. `keyboard_type`
+
+You can use the screenshot as context to make sure the focus is on the right field, document, or window. This function let's you type into that field or document.
+
+Example is below.
+__
+Objective: Write an email to Best buy and ask for computer support
+Action: {{
+    "action": "keyboard_type",
+    "arguments": {{
+        "type_value": "Hello Best Buy, I need help with my computer."
+    }},
+    "explanation": "Typing the email"
+}
+
+3. `mac_search`
+
+When you need to open a program you can use this function to search for a program on Mac. You can use the screenshot as context to see if the right program is already open. 
+
+Example is below.
+__
+Objective: Open Spotify and play the beatles
+Action: {{
+    "action": "mac_search",
+    "arguments": {{
+        "type_value": "spotify"
+    }},
+    "explanation": "Searching for spotify"
+}
+
+Finally, once you have completed the objective, write the following phase and only this phase: DONE
+
+Important: Remember you may need to take all these actions in the right order to accomplish the objective. Look at the screen for context about what to do next. 
+IMPORTANT: Remember to respond with the correct JSON object and nothing else. Do not preappend your response with ```json
 """
 
 USER_TOOL_PROMPT = """
+
+
 Objective: {objective}
+Action: 
 """
 
 # def agent_loop():
@@ -200,16 +180,31 @@ def format_reposition_mouse_prompt(objective, click_guess, original_location):
     )
 
 
-def format_prompt_tool(objective):
-    return USER_TOOL_PROMPT.format(objective=objective)
-
-
 def get_next_action(messages):
+    screen = ImageGrab.grab()
+
+    # Save the image file
+    screen.save("new_screenshot.png")
+
+    with open("new_screenshot.png", "rb") as img_file:
+        img_base64 = base64.b64encode(img_file.read()).decode("utf-8")
+
+    messages = messages + [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Use this image to decide the next action"},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/jpeg;base64,{img_base64}"},
+                },
+            ],
+        }
+    ]
+
     response = client.chat.completions.create(
-        model="gpt-4",
+        model="gpt-4-vision-preview",
         messages=messages,
-        tools=tools,
-        tool_choice="auto",  # auto is default, but we'll be explicit
     )
 
     return response.choices[0].message
@@ -328,37 +323,9 @@ def evaluate_mouse(objective, click_guess, original_location):
     return False, parsed_result["x"], parsed_result["y"]
 
 
-def mouse_click(objective, click_guess):
-    screen = ImageGrab.grab()
-
-    # Save the image file
-    screen.save("screenshot.png")
-    with open("screenshot.png", "rb") as img_file:
-        img_base64 = base64.b64encode(img_file.read()).decode("utf-8")
-
-    click_prompt = format_click_prompt(objective, click_guess)
-
-    response = client.chat.completions.create(
-        model="gpt-4-vision-preview",
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": click_prompt},
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": f"data:image/jpeg;base64,{img_base64}"},
-                    },
-                ],
-            }
-        ],
-        max_tokens=300,
-    )
-
-    result = response.choices[0]
-    content = result.message.content
-    print("[mouse_click] content", content)
-    parsed_result = extract_json_from_string(content)
+def mouse_click(objective):
+    print("[mouse_click] click_xy", click_xy)
+    parsed_result = extract_json_from_string(click_xy)
     if parsed_result:
         handle_click(
             objective, click_guess, parsed_result["x"], parsed_result["y"], content
@@ -547,43 +514,33 @@ def main():
     while looping:
         time.sleep(2)
         response = get_next_action(messages)
+        print("[main] response", response)
 
-        tool_calls = response.tool_calls
+        content = response.content
+        print("[main] content", content)
+
         messages.append(response)
-        # print("response", response)
+        if content == "DONE":
+            print("[main] DONE")
+            looping = False
+            break
 
-        if response.content:
-            if response.content == "DONE":
-                print("DONE")
-                looping = False
-                break
-            print("Self Operating Computer:", response.content)
+        decision = json.loads(content)
+        print("[main] decision", decision)
+        action = decision.get("action")
+        arguments = decision.get("arguments")
 
-        if tool_calls:
-            for tool_call in tool_calls:
-                function_name = tool_call.function.name
-
-                function_args = json.loads(tool_call.function.arguments)
-                print("[Use Tool] name: ", function_name)
-                print("[Use Tool] args: ", function_args)
-                if function_name == "mouse_click":
-                    # add_labeled_cross_grid_to_image("screenshot.png", 400)
-                    function_response = mouse_click(
-                        user_response, function_args["click_guess"]
-                    )
-
-                elif function_name == "keyboard_type":
-                    function_response = keyboard_type(function_args["type_value"])
-                else:
-                    function_response = mac_search(function_args["type_value"])
-                messages.append(
-                    {
-                        "tool_call_id": tool_call.id,
-                        "role": "tool",
-                        "name": function_name,
-                        "content": function_response,
-                    }
-                )
+        if action == "mouse_click":
+            click_xy = arguments
+            function_response = mouse_click(click_xy)
+        elif action == "keyboard_type":
+            type_value = function_args.get("type_value")
+            function_response = keyboard_type(type_value)
+        elif action == "mac_search":
+            type_value = function_args.get("type_value")
+            function_response = mac_search(type_value)
+        else:
+            print("Something went wrong")
 
         loop_count += 1
         if loop_count > 10:
