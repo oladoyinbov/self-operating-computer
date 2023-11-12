@@ -84,87 +84,76 @@ You have an objective from the user and you will decide the exact click and keyb
 
 You have the tools (i.e. functions) below to accomplish the task.
 
-1. `mouse_click` Move mouse and click
-2. `keyboard_type` Type on the keyboard
-3. `mac_search` Search for a program on Mac
+1. mouse_click - Move mouse and click
+2. keyboard_type - Type on the keyboard
+3. mac_search - Search for a program on Mac
 
-Your instructions must always be in JSON format in the format below. 
-
-{{
-    "tool": "Write the function name here, such as `mouse_click`, etc.",
-    "arguments": {{
-        "argument": "Write the arguments in here. We will look closer at what the arguments look like.",
-    }}
-}}
+Your instructions must be in JSON format in the format below. 
 
 Let's look at each function. 
 
-1. `mouse_click`
+1. mouse_click
 
 From looking at a screenshot, your goal is to guess the X & Y location on the screen in order to fire a click event. The X & Y location are in percentage (%) of screen width and height.
 
 Examples are below.
 __
 Objective: Find a image of a banana
-Action: {{
+Action: {
     "action": "mouse_click",
-    "arguments": {{
+    "arguments": {
         "x": "0.5", "y": "0.6"
-    }},
+    },
     "explanation": "Clicking the banana image on Google"
 }
 __
 Objective: Write an email to Best buy and ask for computer support
-Action: {{
+Action: {
     "action": "mouse_click",
-    "arguments": {{
+    "arguments": {
         "x": "0.2", "y": "0.1", 
-    }},
+    },
     "explanation": "Clicking on the email compose box in Outlook"
 }
 
 
-2. `keyboard_type`
+2. keyboard_type
 
 You can use the screenshot as context to make sure the focus is on the right field, document, or window. This function let's you type into that field or document.
 
 Example is below.
 __
 Objective: Write an email to Best buy and ask for computer support
-Action: {{
+Action: {
     "action": "keyboard_type",
-    "arguments": {{
+    "arguments": {
         "type_value": "Hello Best Buy, I need help with my computer."
-    }},
+    },
     "explanation": "Typing the email"
 }
 
-3. `mac_search`
+3. mac_search
 
 When you need to open a program you can use this function to search for a program on Mac. You can use the screenshot as context to see if the right program is already open. 
 
 Example is below.
 __
 Objective: Open Spotify and play the beatles
-Action: {{
+Action: {
     "action": "mac_search",
-    "arguments": {{
+    "arguments": {
         "type_value": "spotify"
-    }},
+    },
     "explanation": "Searching for spotify"
 }
 
 Finally, once you have completed the objective, write the following phase and only this phase: DONE
 
-Important: Remember you may need to take all these actions in the right order to accomplish the objective. Look at the screen for context about what to do next. 
-IMPORTANT: Remember to respond with the correct JSON object and nothing else. Do not preappend your response with ```json
 """
 
 USER_TOOL_PROMPT = """
-
-
 Objective: {objective}
-Action: 
+Action:
 """
 
 # def agent_loop():
