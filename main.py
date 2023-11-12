@@ -116,6 +116,45 @@ Guess: {guess}
 Location: 
 """
 
+REPOSITION_MOUSE_PROMPT = """
+From looking at a screenshot, your goal is to guess the X & Y location on the screen in order to fire a click event. The X & Y location are in percentage (%) of screen width and height.
+
+You just moved the mouse, but now your job is to ensure that the mouse is at the right location. Compare the new mouse location in the image to the objective and click guidance (that is guess). 
+
+If the location looks right then return only the following text: NONE
+
+If the location doesn't look correct then correct the mouse location to get it right. 
+
+
+Example are below.
+__
+Objective: Find a image of a banana
+Guess: Click on the Window with an image of a banana in it. 
+Original Location: {{ "x": "0.5", "y": "0.6", "justification": "I think the banana is in the middle of the screen" }} 
+Update: NONE
+__
+Objective: Write an email to Best buy and ask for computer support
+Guess: Click on the email compose window in Outlook
+Original Location:  {{ "x": "0.2", "y": "0.1", "justification": "It looks like this is where the email compose window is" }} 
+Update: {{ "x": "0.25", "y": "0.11", "justification": "It looks like I was not far enough in the X position the first time." }}
+__
+Objective: Open Spotify and play the beatles
+Guess: Click on the search field in the Spotify app
+Original Location:  {{ "x": "0.2", "y": "0.9", "justification": "I think this is the search field." }}
+Update: {{ "x": "0.1", "y": "0.9", "justification": "The search field is actually at the start of the screen." }}
+__
+
+IMPORTANT: Respond with nothing but the `{{ "x": "percent", "y": "percent",  "justification": "justificaiton here" }}` and do not comment additionally.
+
+Here's where it gets a little complex. A previous function provided you a guess of what to click, but this function was blind so it may be wrong. 
+
+Based on the objective below and the guess use your best judgement on what you should click to reach this objective. 
+Objective: {objective}
+Guess: {guess}
+Original Location: {original_location}
+Update: 
+"""
+
 
 PROMPT_TYPE = """
 You are a professional writer. Based on the objective below, decide what you should write. 
@@ -155,6 +194,12 @@ def format_click_prompt(objective, click_guess):
     return PROMPT_POSITION.format(objective=objective, guess=click_guess)
 
 
+def format_reposition_mouse_prompt(objective, click_guess, original_location):
+    return PROMPT_POSITION.format(
+        objective=objective, guess=click_guess, original_location=original_location
+    )
+
+
 def format_prompt_tool(objective):
     return USER_TOOL_PROMPT.format(objective=objective)
 
@@ -170,8 +215,36 @@ def get_next_action(messages):
     return response.choices[0].message
 
 
-def click_at_percentage(
-    x_percentage, y_percentage, duration=0.5, circle_radius=50, circle_duration=0.5
+def check_click_location():
+    screen_width, screen_height = pyautogui.size()
+
+    # Get current mouse position
+    mouse_x, mouse_y = pyautogui.position()
+
+    # Calculate the rectangle bounds (25% of the screen around the mouse)
+    capture_width = screen_width * 0.25
+    capture_height = screen_height * 0.25
+    left = max(mouse_x - capture_width / 2, 0)
+    top = max(mouse_y - capture_height / 2, 0)
+    right = min(mouse_x + capture_width / 2, screen_width)
+    bottom = min(mouse_y + capture_height / 2, screen_height)
+
+    # Capture the specified portion of the screen
+    screen = ImageGrab.grab(bbox=(left, top, right, bottom))
+
+    # Save the image file
+    screen.save("mouse_location_check.png")
+
+    return False
+
+
+def handle_click(
+    objective,
+    click_guess,
+    x_percentage,
+    y_percentage,
+    content="",
+    duration=0.5,
 ):
     # Get the size of the primary monitor
     screen_width, screen_height = pyautogui.size()
@@ -183,6 +256,24 @@ def click_at_percentage(
     # Move to the position smoothly
     pyautogui.moveTo(x_pixel, y_pixel, duration=duration)
 
+    correct_click_location, new_x_pixal, new_y_pixel = evaluate_mouse(
+        objective, click_guess, content
+    )
+    print("correct_click_location", correct_click_location)
+
+    if not correct_click_location:
+        print("We need to reposition the mouse")
+        print("new_x_pixal", new_x_pixal)
+        print("new_y_pixel", new_y_pixel)
+        x_pixel = new_x_pixal
+        y_pixel = new_y_pixel
+        pyautogui.moveTo(x_pixel, y_pixel, duration=duration)
+
+    click_at_percentage(x_pixel, y_pixel)
+    return "We clicked " + click_guess
+
+
+def click_at_percentage(x_pixel, y_pixel, circle_radius=50, circle_duration=0.3):
     # Circular movement
     start_time = time.time()
     while time.time() - start_time < circle_duration:
@@ -196,7 +287,52 @@ def click_at_percentage(
     return "successfully clicked"
 
 
+def evaluate_mouse(objective, click_guess, original_location):
+    screen = ImageGrab.grab()
+
+    # Save the image file
+    screen.save("new_screenshot.png")
+
+    with open("new_screenshot.png", "rb") as img_file:
+        img_base64 = base64.b64encode(img_file.read()).decode("utf-8")
+
+    reposition_click_prompt = format_reposition_mouse_prompt(
+        objective, click_guess, original_location
+    )
+
+    response = client.chat.completions.create(
+        model="gpt-4-vision-preview",
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": reposition_click_prompt},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/jpeg;base64,{img_base64}"},
+                    },
+                ],
+            }
+        ],
+        max_tokens=300,
+    )
+
+    result = response.choices[0]
+    content = result.message.content
+    print("[evaluate_mouse] content", content)
+    if content == "NONE":
+        return True, 0, 0
+
+    parsed_result = extract_json_from_string(content)
+
+    return False, parsed_result["x"], parsed_result["y"]
+
+
 def mouse_click(objective, click_guess):
+    screen = ImageGrab.grab()
+
+    # Save the image file
+    screen.save("screenshot.png")
     with open("screenshot.png", "rb") as img_file:
         img_base64 = base64.b64encode(img_file.read()).decode("utf-8")
 
@@ -224,7 +360,9 @@ def mouse_click(objective, click_guess):
     print("[mouse_click] content", content)
     parsed_result = extract_json_from_string(content)
     if parsed_result:
-        click_at_percentage(parsed_result["x"], parsed_result["y"])
+        handle_click(
+            objective, click_guess, parsed_result["x"], parsed_result["y"], content
+        )
         return "We clicked something, it may have been" + click_guess
 
     return "We failed to click" + click_guess
@@ -425,16 +563,10 @@ def main():
             for tool_call in tool_calls:
                 function_name = tool_call.function.name
 
-                function_to_call = available_functions[function_name]
                 function_args = json.loads(tool_call.function.arguments)
                 print("[Use Tool] name: ", function_name)
                 print("[Use Tool] args: ", function_args)
                 if function_name == "mouse_click":
-                    screen = ImageGrab.grab()
-
-                    # Save the image file
-                    screen.save("screenshot.png")
-
                     # add_labeled_cross_grid_to_image("screenshot.png", 400)
                     function_response = mouse_click(
                         user_response, function_args["click_guess"]
